@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WhaleWatch</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --border: #262b36;
+    --text: #e6e8ee;
+    --muted: #8b93a7;
+    --accent: #4f9cf9;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  header {
+    padding: 28px 24px 10px;
+    text-align: center;
+  }
+  h1 {
+    margin: 0;
+    font-family: "Snell Roundhand", "Brush Script MT", "Segoe Script", cursive;
+    font-size: 50px;
+    font-weight: 400;
+    letter-spacing: 0.01em;
+    color: #ff4da6;
+  }
+  .subtitle {
+    display: block;
+    margin-top: 8px;
+    color: #56ccf2;
+    font-size: 11px;
+    font-weight: 300;
+    letter-spacing: 0.06em;
+  }
+  main { padding: 24px; max-width: 1200px; margin: 0 auto; }
+  /* Terminal-style callout: a shell prompt with the note in fluorescent green. */
+  .terminal {
+    background: #06120a;
+    border: 1px solid #14351f;
+    border-radius: 8px;
+    padding: 20px 22px;
+    margin: 12px auto 40px;
+    max-width: 820px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 13px;
+    line-height: 1.75;
+  }
+  .terminal .line + .line { margin-top: 10px; }
+  .terminal .line { color: #39ff14; }
+  .terminal .prompt { color: #39ff14; font-weight: 700; margin-right: 8px; }
+  .terminal .cursor { color: #39ff14; animation: blink 1.1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .filters {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 12px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+  input, select {
+    width: 100%;
+    padding: 7px 9px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    color: var(--text);
+    font-size: 13px;
+  }
+  input:focus, select:focus { outline: 1px solid var(--accent); }
+  /* Filter labels and field text share the sky-blue of the header subtitle. */
+  .filters label, .filters input, .filters select { color: #56ccf2; }
+  .actions { display: flex; gap: 8px; align-items: flex-end; }
+  button {
+    padding: 8px 14px;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    background: var(--accent);
+    color: #06121f;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  button.secondary { background: transparent; color: var(--muted); }
+  .meta { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel);
+  }
+  table { width: 100%; border-collapse: collapse; white-space: nowrap; }
+  th {
+    text-align: left;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 13px; }
+  tr:last-child td { border-bottom: none; }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; }
+  td a { color: var(--accent); text-decoration: none; }
+  td a:hover { text-decoration: underline; }
+  .pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .pill.pending { background: #3a2f14; color: #f0c674; }
+  .pill.confirmed { background: #16301f; color: #6fcf97; }
+  .pill.orphaned { background: #3a1a1a; color: #eb7f7f; }
+  tr.orphaned td { opacity: 0.55; }
+  .empty { padding: 32px; text-align: center; color: var(--muted); }
+  .table-head {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; flex-wrap: wrap; margin-bottom: 10px;
+  }
+  .table-head .meta { margin: 0; }
+  .table-controls { display: flex; align-items: center; gap: 10px; }
+  .table-controls .count { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  button.mini {
+    padding: 4px 11px; font-size: 11px; font-weight: 600;
+    background: transparent; color: var(--muted);
+    border: 1px solid var(--border); border-radius: 999px; cursor: pointer;
+  }
+  button.mini:hover { color: var(--text); border-color: var(--accent); }
+  button.mini.active { background: var(--accent); color: #06121f; border-color: var(--accent); }
+  .star { cursor: pointer; color: var(--muted); margin-right: 6px; user-select: none; }
+  .star.on { color: #f0c674; }
+  .xa { margin-left: 6px; color: var(--accent); cursor: default; }
+  tr.watched td { background: rgba(79, 156, 249, 0.07); }
+  #toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 50; }
+  .toast {
+    background: var(--panel); border: 1px solid var(--border); border-left: 3px solid var(--accent);
+    border-radius: 6px; padding: 10px 14px; font-size: 13px; color: var(--text);
+    max-width: 320px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  }
+  .toast.price { border-left-color: #6fcf97; }
+</style>
+</head>
+<body>
+<header>
+  <h1>WhaleWatch</h1>
+  <div class="subtitle">Large ERC-20 transfers on Ethereum mainnet</div>
+</header>
+
+<main>
+  <section class="terminal">
+    <div class="line"><span class="prompt">$</span>whalewatch --note</div>
+    <div class="line">
+      Stablecoins move the market &mdash; just not the way you'd expect. A stablecoin like USDC or
+      USDT is pegged to the US dollar, so its own price barely moves, unlike volatile assets such as
+      ETH or BTC. That's why traders park capital in stablecoins to hedge &mdash; and why a sudden,
+      large stablecoin transfer is often a whale getting into position. Big stablecoin flows
+      frequently precede sharp price swings in other crypto assets, so watching them can serve as an
+      early signal. Star specific wallets below to track their patterns over time.<span class="cursor">&#9608;</span>
+    </div>
+  </section>
+
+  <div class="filters">
+    <div>
+      <label for="token_symbol">Token</label>
+      <select id="token_symbol">
+        <option value="">All</option>
+        {% for symbol in tokens %}<option value="{{ symbol }}">{{ symbol }}</option>{% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="address">Address (sender or receiver)</label>
+      <input id="address" placeholder="0x...">
+    </div>
+    <div>
+      <label for="min_amount">Min amount</label>
+      <input id="min_amount" type="number" step="any" placeholder="100000">
+    </div>
+    <div>
+      <label for="max_amount">Max amount</label>
+      <input id="max_amount" type="number" step="any">
+    </div>
+    <div>
+      <label for="min_confirmations">Min confirmations</label>
+      <input id="min_confirmations" type="number">
+    </div>
+    <div>
+      <label for="max_confirmations">Max confirmations</label>
+      <input id="max_confirmations" type="number">
+    </div>
+    <div>
+      <label for="block_confirmed">Block</label>
+      <input id="block_confirmed" type="number" placeholder="25497861">
+    </div>
+    <div>
+      <label for="status">Status</label>
+      <select id="status">
+        <option value="all">All</option>
+        <option value="pending">Pending</option>
+        <option value="confirmed">Confirmed</option>
+        <option value="orphaned">Orphaned</option>
+      </select>
+    </div>
+    <div class="actions">
+      <button id="apply">Apply</button>
+      <button id="reset" class="secondary">Reset</button>
+    </div>
+  </div>
+
+  <div class="table-head">
+    <span class="meta" id="meta">Loading…</span>
+    <div class="table-controls">
+      <span class="count" id="watch-count">0 watched</span>
+      <button id="starred-toggle" class="mini">Show starred only</button>
+      <button id="notify-toggle" class="mini">Enable notifications</button>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Token</th><th>Amount</th><th>From</th><th>To</th>
+          <th>Block</th><th>Confirmations</th><th>Status</th><th>Tx</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="empty" id="empty" hidden>No transactions match these filters.</div>
+  </div>
+</main>
+
+<div id="toasts"></div>
+
+<script>
+const FIELDS = ["token_symbol", "address", "min_amount", "max_amount",
+                "min_confirmations", "max_confirmations", "block_confirmed", "status"];
+
+const STATUS = { "Yes": "pending", "No": "confirmed", "Orphaned": "orphaned" };
+const LABEL = { "Yes": "Pending", "No": "Confirmed", "Orphaned": "Orphaned" };
+const VOLATILE = new Set(["WETH", "WBTC"]);
+
+const short = (a) => a.slice(0, 6) + "…" + a.slice(-4);
+const fmt = (n) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+
+// Link a value out to Etherscan so any row can be verified on-chain.
+const link = (path, text, title) =>
+  `<a href="https://etherscan.io/${path}" target="_blank" rel="noopener" title="${title}">${text}</a>`;
+const addressLink = (addr) => link("address/" + addr, short(addr), addr);
+
+// Watchlist lives in the browser; cross-asset set is recomputed from the backend.
+const WATCH_KEY = "whalewatch:watchlist";
+let watchlist = new Set(JSON.parse(localStorage.getItem(WATCH_KEY) || "[]"));
+let crossAsset = new Set();
+let lastData = { results: [], count: 0, total: 0 };
+let lastSeenId = 0;
+let starredOnly = false;
+
+const isWatched = (a) => watchlist.has(a.toLowerCase());
+const isCrossAsset = (a) => crossAsset.has(a.toLowerCase());
+const saveWatchlist = () => localStorage.setItem(WATCH_KEY, JSON.stringify([...watchlist]));
+
+function addressCell(addr) {
+  const on = isWatched(addr);
+  const star = `<span class="star ${on ? "on" : ""}" data-addr="${addr}" title="Watch this address">${on ? "★" : "☆"}</span>`;
+  const badge = isCrossAsset(addr)
+    ? `<span class="xa" title="Active in both stablecoin and volatile transfers">⇄</span>` : "";
+  return `${star}${addressLink(addr)}${badge}`;
+}
+
+function buildQuery() {
+  const params = new URLSearchParams();
+  for (const id of FIELDS) {
+    const value = document.getElementById(id).value.trim();
+    if (value && value !== "all") params.set(id, value);
+  }
+  return params;
+}
+
+function renderTable(data) {
+  const tbody = document.getElementById("rows");
+  const rows = starredOnly
+    ? data.results.filter((t) => isWatched(t.from_address) || isWatched(t.to_address))
+    : data.results;
+
+  tbody.innerHTML = "";
+  for (const tx of rows) {
+    const state = STATUS[tx.transaction_pending];
+    const cls = [];
+    if (state === "orphaned") cls.push("orphaned");
+    if (isWatched(tx.from_address) || isWatched(tx.to_address)) cls.push("watched");
+    const tr = document.createElement("tr");
+    tr.className = cls.join(" ");
+    tr.innerHTML = `
+      <td>${tx.token_symbol}</td>
+      <td>${fmt(tx.amount)}</td>
+      <td class="mono">${addressCell(tx.from_address)}</td>
+      <td class="mono">${addressCell(tx.to_address)}</td>
+      <td class="mono">${link("block/" + tx.block_confirmed, tx.block_confirmed, tx.block_hash)}</td>
+      <td>${tx.num_confirmations}</td>
+      <td><span class="pill ${state}">${LABEL[tx.transaction_pending]}</span></td>
+      <td class="mono">${link("tx/0x" + tx.transaction_hash, short("0x" + tx.transaction_hash), tx.transaction_hash)}</td>`;
+    tbody.appendChild(tr);
+  }
+
+  document.getElementById("empty").hidden = rows.length > 0;
+  document.getElementById("meta").textContent = starredOnly
+    ? `Showing ${rows.length} starred transaction${rows.length === 1 ? "" : "s"}`
+    : `Showing ${data.count} of ${data.total} transactions`;
+}
+
+async function load() {
+  const res = await fetch("/api/transactions?" + buildQuery());
+  lastData = await res.json();
+  renderTable(lastData);
+}
+
+async function refreshCrossAsset() {
+  try {
+    const data = await (await fetch("/api/cross-asset?limit=500")).json();
+    crossAsset = new Set(data.results.map((r) => r.addr));
+  } catch (e) { /* keep the previous set on error */ }
+}
+
+// --- notifications ---
+function toast(text, kind) {
+  const el = document.createElement("div");
+  el.className = "toast" + (kind ? " " + kind : "");
+  el.textContent = text;
+  document.getElementById("toasts").appendChild(el);
+  setTimeout(() => el.remove(), 8000);
+}
+
+function notify(title, body, kind) {
+  if (window.Notification && Notification.permission === "granted") {
+    new Notification(title, { body });
+  } else {
+    toast(body ? `${title} — ${body}` : title, kind);
+  }
+}
+
+async function enableNotifications() {
+  const btn = document.getElementById("notify-toggle");
+  if (!window.Notification) { toast("This browser does not support notifications"); return; }
+  const perm = await Notification.requestPermission();
+  btn.textContent = perm === "granted" ? "Notifications on" : "Enable notifications";
+}
+
+function relTime(ts) {
+  const s = Math.max(0, Math.floor(Date.now() / 1000) - ts);
+  if (s < 90) return "just now";
+  if (s < 3600) return `${Math.round(s / 60)}m ago`;
+  if (s < 86400) return `${Math.round(s / 3600)}h ago`;
+  return `${Math.round(s / 86400)}d ago`;
+}
+
+// Price move only for volatile transfers - the token's own price around its transfer.
+async function priceLine(tx) {
+  if (!VOLATILE.has(tx.token_symbol)) return null;
+  try {
+    const data = await (await fetch("/api/price-impact/" + tx.transaction_hash)).json();
+    const m = (data.price_impact || [])[0];
+    if (!m || m.pct_change == null) return null;
+    return `${tx.token_symbol} ${m.pct_change >= 0 ? "+" : ""}${m.pct_change}% around this transfer`;
+  } catch (e) { return null; }
+}
+
+async function announce(tx, live) {
+  const watched = isWatched(tx.from_address) ? tx.from_address : tx.to_address;
+  const sent = tx.from_address.toLowerCase() === watched.toLowerCase();
+  const when = live ? "just now" : relTime(tx.block_timestamp);
+  notify(`★ ${short(watched)} ${sent ? "sent" : "received"} ${fmt(tx.amount)} ${tx.token_symbol}`, when);
+  const price = await priceLine(tx);
+  if (price) notify(price, "", "price");
+}
+
+async function checkActivity() {
+  try {
+    const data = await (await fetch("/api/transactions?limit=50")).json();
+    const fresh = data.results.filter((t) =>
+      t.id > lastSeenId && (isWatched(t.from_address) || isWatched(t.to_address)));
+    for (const tx of fresh.reverse()) await announce(tx, true);
+    if (data.results.length) lastSeenId = Math.max(lastSeenId, ...data.results.map((t) => t.id));
+  } catch (e) { /* ignore a single failed poll */ }
+}
+
+// --- watchlist UI ---
+function renderWatchbar() {
+  document.getElementById("watch-count").textContent = `${watchlist.size} watched`;
+}
+
+async function toggleWatch(addr) {
+  const a = addr.toLowerCase();
+  if (watchlist.has(a)) {
+    watchlist.delete(a);
+  } else {
+    watchlist.add(a);
+    // Show this wallet's most recent transfer right away so the alert format is visible at once.
+    try {
+      const data = await (await fetch("/api/transactions?address=" + a + "&limit=1")).json();
+      if (data.results[0]) await announce(data.results[0], false);
+      else toast("Now watching " + short(a) + " (no transfers yet)");
+    } catch (e) { /* ignore */ }
+  }
+  saveWatchlist();
+  renderWatchbar();
+  renderTable(lastData);
+}
+
+document.getElementById("rows").addEventListener("click", (e) => {
+  const star = e.target.closest(".star");
+  if (star) toggleWatch(star.dataset.addr);
+});
+document.getElementById("notify-toggle").onclick = enableNotifications;
+document.getElementById("starred-toggle").onclick = (e) => {
+  starredOnly = !starredOnly;
+  e.target.textContent = starredOnly ? "Show all" : "Show starred only";
+  e.target.classList.toggle("active", starredOnly);
+  renderTable(lastData);
+};
+document.getElementById("apply").onclick = load;
+document.getElementById("reset").onclick = () => {
+  for (const id of FIELDS) document.getElementById(id).value = id === "status" ? "all" : "";
+  load();
+};
+
+async function poll() {
+  await load();
+  await checkActivity();
+}
+
+(async () => {
+  await refreshCrossAsset();
+  await load();
+  // Baseline so pre-existing rows don't fire alerts; only genuinely new activity does.
+  lastSeenId = lastData.results.length ? Math.max(...lastData.results.map((t) => t.id)) : 0;
+  renderWatchbar();
+  setInterval(poll, 10000);
+  setInterval(refreshCrossAsset, 60000);
+})();
+</script>
+</body>
+</html>
