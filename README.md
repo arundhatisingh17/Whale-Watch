@@ -126,21 +126,6 @@ The suite covers the query/filter layer and the reconciliation logic. Reorg hand
 injecting a fake chain into the reconciler, so orphan detection is verified without waiting for a real
 reorg — including a regression test for the false-positive the hash check exists to prevent.
 
-## Limitations
-
-- A `Transfer` event is not a trade. Exchange rebalances, bridge deposits, and internal custodial
-  moves all show up here and aren't distinguished from meaningful flows.
-- Cross-asset addresses are unlabeled, so many are routers and exchange hot wallets — infrastructure
-  that touches everything. Labeling known addresses is the natural next step and would turn "active in
-  both" into a real signal.
-- The price context is observational, not causal — it shows what the price did around a transfer, not
-  that the transfer caused it.
-- Notifications fire within the ~10s poll and only while the dashboard tab is open. Always-on,
-  background alerts would need a browser extension.
-- Reorgs deeper than 6 blocks aren't detected, by design.
-- The watcher only sees transfers emitted while it's running; `seed.py` backfills, but there's no
-  continuous gap-filling.
-
 ## Built with
 
 Python, Flask, web3.py, SQLAlchemy + SQLite, and the Coinbase public price API. No frontend framework —
