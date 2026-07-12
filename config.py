@@ -13,6 +13,9 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///transactions")
 CONFIRMATION_THRESHOLD = 6
 POLL_INTERVAL_SECONDS = 5
 
+# Window (each side of a transfer) used to record the price move once it has elapsed.
+PRICE_WINDOW_SECONDS = 60
+
 TOKENS = {
     "USDC": {
         "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",

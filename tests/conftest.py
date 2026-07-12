@@ -27,10 +27,10 @@ def clean_db():
 def add_transfer():
     def _add(tx_hash, block, block_hash, confirmations=0, status="Yes",
              token="USDC", amount=1_000_000.0, log_index=0,
-             from_addr="0xfrom", to_addr="0xto", block_timestamp=0):
+             from_addr="0xfrom", to_addr="0xto", block_timestamp=0, unit_price=1.0):
         return db.save_transaction(
             token, from_addr, to_addr, amount, block,
-            confirmations, status, tx_hash, log_index, block_hash, block_timestamp,
+            confirmations, status, tx_hash, log_index, block_hash, block_timestamp, unit_price,
         )
     return _add
 

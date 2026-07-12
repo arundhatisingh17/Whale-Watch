@@ -233,7 +233,7 @@
     <table>
       <thead>
         <tr>
-          <th>Token</th><th>Amount</th><th>From</th><th>To</th>
+          <th>Token</th><th>Amount</th><th>USD Value</th><th>Price (USD)</th><th>Price Δ</th><th>From</th><th>To</th>
           <th>Block</th><th>Confirmations</th><th>Status</th><th>Tx</th>
         </tr>
       </thead>
@@ -255,6 +255,8 @@ const VOLATILE = new Set(["WETH", "WBTC"]);
 
 const short = (a) => a.slice(0, 6) + "…" + a.slice(-4);
 const fmt = (n) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+const usd = (n) => n == null ? "—" : "$" + n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+const pct = (n) => n == null ? "—" : (n >= 0 ? "+" : "") + n + "%";
 
 // Link a value out to Etherscan so any row can be verified on-chain.
 const link = (path, text, title) =>
@@ -304,9 +306,14 @@ function renderTable(data) {
     if (isWatched(tx.from_address) || isWatched(tx.to_address)) cls.push("watched");
     const tr = document.createElement("tr");
     tr.className = cls.join(" ");
+    const price = tx.unit_price;
+    const value = price == null ? null : tx.amount * price;
     tr.innerHTML = `
       <td>${tx.token_symbol}</td>
       <td>${fmt(tx.amount)}</td>
+      <td>${usd(value)}</td>
+      <td>${usd(price)}</td>
+      <td>${pct(tx.price_change_pct)}</td>
       <td class="mono">${addressCell(tx.from_address)}</td>
       <td class="mono">${addressCell(tx.to_address)}</td>
       <td class="mono">${link("block/" + tx.block_confirmed, tx.block_confirmed, tx.block_hash)}</td>

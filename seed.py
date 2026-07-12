@@ -1,10 +1,14 @@
 import argparse
+import time
 from functools import lru_cache
 
 from web3 import Web3
 
-from config import ALCHEMY_URL, CONFIRMATION_THRESHOLD, ERC20_ABI, TOKENS
-from db import init_db, query_transactions, save_transaction
+from config import (ALCHEMY_URL, CONFIRMATION_THRESHOLD, ERC20_ABI,
+                    PRICE_WINDOW_SECONDS, TOKENS)
+from db import (init_db, query_transactions, record_price_moves,
+                save_transaction)
+from prices import price_change_pct, unit_price_usd
 
 w3 = Web3(Web3.HTTPProvider(ALCHEMY_URL))
 
@@ -87,16 +91,26 @@ def run(target_rows, end_block=None):
     for t in transfers:
         num_confirmations = head - t["block_confirmed"]
         pending = "Yes" if num_confirmations < CONFIRMATION_THRESHOLD else "No"
+        timestamp = block_timestamp_at(t["block_confirmed"])
 
         if save_transaction(
             t["token_symbol"], t["from_addr"], t["to_addr"], t["amount"],
             t["block_confirmed"], num_confirmations, pending, t["transaction_hash"],
-            t["log_index"], t["block_hash"], block_timestamp_at(t["block_confirmed"]),
+            t["log_index"], t["block_hash"], timestamp,
+            unit_price_usd(t["token_symbol"], timestamp),
         ):
             inserted += 1
 
     skipped = len(transfers) - inserted
     print(f"scanned {scanned} blocks, inserted {inserted}, skipped {skipped} already present")
+
+    # Backfilled transfers are old enough that their price window has already elapsed, so record
+    # the observed move now instead of waiting for the watcher.
+    recorded = record_price_moves(
+        int(time.time()), PRICE_WINDOW_SECONDS,
+        lambda sym, ts: price_change_pct(sym, ts, PRICE_WINDOW_SECONDS),
+    )
+    print(f"recorded price move for {recorded} volatile transfer(s)")
     print(f"table now holds {query_transactions()['total']} transactions")
 
 

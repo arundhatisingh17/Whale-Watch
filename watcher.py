@@ -5,8 +5,10 @@ from functools import lru_cache
 from web3 import Web3
 
 from config import (ALCHEMY_URL, CONFIRMATION_THRESHOLD, ERC20_ABI,
-                    POLL_INTERVAL_SECONDS, TOKENS)
-from db import init_db, save_transaction, update_pending_transactions
+                    POLL_INTERVAL_SECONDS, PRICE_WINDOW_SECONDS, TOKENS)
+from db import (init_db, record_price_moves, save_transaction,
+                update_pending_transactions)
+from prices import price_change_pct, unit_price_usd
 
 w3 = Web3(Web3.HTTPProvider(ALCHEMY_URL))
 
@@ -58,6 +60,7 @@ def run():
                 block_number = event["blockNumber"]
                 num_confirmations = latest_block - block_number
                 pending = "Yes" if num_confirmations < CONFIRMATION_THRESHOLD else "No"
+                timestamp = block_timestamp_at(block_number)
 
                 saved = save_transaction(
                     symbol,
@@ -70,7 +73,8 @@ def run():
                     event["transactionHash"].hex(),
                     event["logIndex"],
                     event["blockHash"].hex(),
-                    block_timestamp_at(block_number),
+                    timestamp,
+                    unit_price_usd(symbol, timestamp),
                 )
                 if saved:
                     print(f"[{symbol}] {value:,.2f} in block {block_number}")
@@ -80,6 +84,13 @@ def run():
         )
         if confirmed or orphaned:
             print(f"{seen} pending: {confirmed} confirmed, {orphaned} orphaned by reorg")
+
+        recorded = record_price_moves(
+            int(time.time()), PRICE_WINDOW_SECONDS,
+            lambda sym, ts: price_change_pct(sym, ts, PRICE_WINDOW_SECONDS),
+        )
+        if recorded:
+            print(f"recorded price move for {recorded} transfer(s)")
 
         time.sleep(POLL_INTERVAL_SECONDS)
 

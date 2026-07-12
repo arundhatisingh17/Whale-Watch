@@ -1,6 +1,9 @@
 from datetime import datetime, timezone
+from functools import lru_cache
 
 import requests
+
+from config import STABLECOINS
 
 # Coinbase's public candle endpoint - free, no API key, and reachable from the US
 # (Binance's api.binance.com returns 451 here). Candles are 1-minute OHLC.
@@ -38,6 +41,41 @@ def _close_near(candles, target_ts):
     if not candles:
         return None
     return min(candles, key=lambda c: abs(c[0] - target_ts))[4]
+
+
+@lru_cache(maxsize=4096)
+def _price_at_minute(product, minute_ts):
+    candles = _candles(product, minute_ts - GRANULARITY, minute_ts + GRANULARITY)
+    return _close_near(candles, minute_ts)
+
+
+def unit_price_usd(token_symbol, timestamp):
+    """USD price of one token at the given time, for valuing a transfer.
+
+    Stablecoins are pegged, so 1.0. For WETH/WBTC we look up ETH/BTC at that minute; if the
+    lookup fails (network, or a time outside the feed's range) we return None rather than guess.
+    """
+    if token_symbol in STABLECOINS:
+        return 1.0
+    product = PRODUCT_FOR.get(token_symbol)
+    if not product:
+        return None
+    try:
+        return _price_at_minute(product, timestamp - timestamp % GRANULARITY)
+    except Exception:
+        return None
+
+
+def price_change_pct(token_symbol, timestamp, window_seconds):
+    """Percent price move of a volatile token around a transfer, or None if unavailable."""
+    product = PRODUCT_FOR.get(token_symbol)
+    if not product:
+        return None
+    try:
+        move = price_move(product, timestamp, window_seconds)
+    except Exception:
+        return None
+    return move["pct_change"] if move else None
 
 
 def price_move(product, transfer_ts, window_seconds=60):

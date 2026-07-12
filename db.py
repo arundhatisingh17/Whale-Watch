@@ -29,6 +29,8 @@ def init_db():
                 log_index INTEGER NOT NULL,
                 block_hash TEXT NOT NULL,
                 block_timestamp INTEGER NOT NULL,
+                unit_price REAL,
+                price_change_pct REAL,
                 UNIQUE (transaction_hash, log_index)
             )
         """))
@@ -42,7 +44,7 @@ def init_db():
 
 def save_transaction(token_symbol, from_addr, to_addr, amount, block_confirmed,
                      num_confirmations, transaction_pending, transaction_hash, log_index,
-                     block_hash, block_timestamp):
+                     block_hash, block_timestamp, unit_price):
     """Insert one transfer, returning False if it is already stored.
 
     A duplicate (same hash and log index) raises IntegrityError, which we treat as a
@@ -54,10 +56,11 @@ def save_transaction(token_symbol, from_addr, to_addr, amount, block_confirmed,
                 INSERT INTO transactions
                 (token_symbol, from_address, to_address, amount, block_confirmed,
                  num_confirmations, transaction_pending, transaction_hash, log_index,
-                 block_hash, block_timestamp)
+                 block_hash, block_timestamp, unit_price)
                 VALUES
                 (:token_symbol, :from_addr, :to_addr, :amount, :block_confirmed,
-                 :num_confirmations, :pending, :tx_hash, :log_index, :block_hash, :block_timestamp)
+                 :num_confirmations, :pending, :tx_hash, :log_index, :block_hash,
+                 :block_timestamp, :unit_price)
             """), {
                 "token_symbol": token_symbol,
                 "from_addr": from_addr,
@@ -70,6 +73,7 @@ def save_transaction(token_symbol, from_addr, to_addr, amount, block_confirmed,
                 "log_index": log_index,
                 "block_hash": block_hash,
                 "block_timestamp": block_timestamp,
+                "unit_price": unit_price,
             })
         return True
     except IntegrityError:
@@ -130,6 +134,38 @@ def update_pending_transactions(latest_block, confirmation_threshold, block_hash
         """), updates)
 
     return len(pending), confirmed, orphaned
+
+
+def record_price_moves(now_ts, window_seconds, price_change_fn):
+    """Record the observed price move for volatile transfers whose window has elapsed.
+
+    A transfer's "after" price doesn't exist at insert time, so this fills price_change_pct
+    later - once now is past block_timestamp + window - and only once per transfer (rows that
+    already have a value are skipped). price_change_fn(token_symbol, block_timestamp) -> pct.
+    """
+    volatile = ", ".join(f"'{v}'" for v in VOLATILE)
+    with engine.connect() as conn:
+        due = conn.execute(text(f"""
+            SELECT id, token_symbol, block_timestamp
+            FROM transactions
+            WHERE price_change_pct IS NULL
+              AND token_symbol IN ({volatile})
+              AND block_timestamp + :window <= :now
+        """), {"window": window_seconds, "now": now_ts}).fetchall()
+
+    updates = []
+    for row in due:
+        pct = price_change_fn(row.token_symbol, row.block_timestamp)
+        if pct is not None:
+            updates.append({"pct": pct, "id": row.id})
+
+    if updates:
+        with engine.begin() as conn:
+            conn.execute(
+                text("UPDATE transactions SET price_change_pct = :pct WHERE id = :id"), updates
+            )
+
+    return len(updates)
 
 
 SORT_COLUMNS = {"id", "amount", "block_confirmed", "num_confirmations"}
@@ -211,7 +247,8 @@ def query_transactions(token_symbol=None, address=None, from_address=None, to_ad
         rows = conn.execute(text(f"""
             SELECT id, token_symbol, from_address, to_address, amount,
                    block_confirmed, num_confirmations, transaction_pending,
-                   transaction_hash, log_index, block_hash, block_timestamp
+                   transaction_hash, log_index, block_hash, block_timestamp,
+                   unit_price, price_change_pct
             FROM transactions
             {where}
             ORDER BY {sort_by} {direction}
